@@ -69,7 +69,18 @@ public class PlayerController : MonoBehaviour
             if( mMoveNum > 0 ) { --mMoveNum; }
             if( mMoveNum < 0 ) { ++mMoveNum; }
             if( mMoveNum == 0 ){ mIsMoveRequest = false; }
+            //StartCoroutine( UpdateMoveNum_() );
         }
+    }
+
+    private IEnumerator UpdateMoveNum_()
+    {
+        yield return new WaitForSeconds( 0.03f );
+
+        // マス移動管理を更新
+        if (mMoveNum > 0) { --mMoveNum; }
+        if (mMoveNum < 0) { ++mMoveNum; }
+        if (mMoveNum == 0) { mIsMoveRequest = false; }
     }
 
     // マス移動
@@ -183,7 +194,10 @@ public class PlayerController : MonoBehaviour
     // 移動をリクエスト
     public void RequestMove( int i_move_num )
     {
-        mMoveNum       = i_move_num;
-        mIsMoveRequest = true;
+        if( i_move_num > 0)
+        {
+            mMoveNum       = i_move_num;
+            mIsMoveRequest = true;
+        }
     }
 }
