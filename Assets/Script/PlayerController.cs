@@ -4,15 +4,17 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    private Rigidbody  mRigidbody;
-    private Animator   mAnimator;
+    private Rigidbody  mRigidbody; // 物理
+    private Animator   mAnimator;  // アニメータ
 
-    private GameObject mPrevPanel;
-    private GameObject mNextPanel;
-    private Vector3    mPrevPanelPos;
-    private Vector3    mNextPanelPos;
-    private bool       mIsMoveRequest = false;
-    private int        mMoveNum       = 0;
+    private GameObject mNowPanel;     // 現在のパネル
+    private GameObject mPrevPanel;    // 前のパネル（オブジェクト）
+    private GameObject mNextPanel;    // 次のパネル（オブジェクト）
+    private Vector3    mPrevPanelPos; // 前のパネル位置
+    private Vector3    mNextPanelPos; // 次のパネル位置
+
+    private bool mIsMoveRequest = false; // マス移動中か
+    private int  mMoveNum       = 0;     // マス移動数
 
     private void Awake()
     {
@@ -48,6 +50,10 @@ public class PlayerController : MonoBehaviour
     // プレイヤーが何かに衝突した瞬間
     private void OnCollisionEnter( Collision collision )
     {
+        if( collision.gameObject.tag == "NormalPanel" )
+        {
+            mNowPanel = collision.gameObject;
+        }
     }
 
     private void OnTriggerEnter( Collider other )
@@ -55,35 +61,27 @@ public class PlayerController : MonoBehaviour
         // マスの停止位置に触れたら
         if( other.tag == "StayPos" )
         {
-            GameObject parent = other.transform.parent.gameObject;
+            GameObject parent     = other.transform.parent.gameObject;
+            var        panel_ctrl = parent.GetComponent<NormalPanelController>();
 
             // 前後パネル更新
-            mPrevPanel = parent.GetComponent<NormalPanelController>().PrevPanel;
-            mNextPanel = parent.GetComponent<NormalPanelController>().NextPanel;
+            mPrevPanel = panel_ctrl.PrevPanel;
+            mNextPanel = panel_ctrl.NextPanel;
 
             // 前後パネル位置を更新
             if( mPrevPanel != null ) { mPrevPanelPos = mPrevPanel.transform.position; }
             if( mNextPanel != null ) { mNextPanelPos = mNextPanel.transform.position; }
 
             // マス移動管理を更新
-            if( mMoveNum > 0 ) { --mMoveNum; }
-            if( mMoveNum < 0 ) { ++mMoveNum; }
-            if( mMoveNum == 0 ){ mIsMoveRequest = false; }
-            //StartCoroutine( UpdateMoveNum_() );
+            if( mMoveNum > 0 ) { --mMoveNum; } // 進む
+            if( mMoveNum < 0 ) { ++mMoveNum; } // 戻る
+            if( mMoveNum == 0 ){ mIsMoveRequest = false; } // 停止
         }
     }
 
-    private IEnumerator UpdateMoveNum_()
-    {
-        yield return new WaitForSeconds( 0.03f );
-
-        // マス移動管理を更新
-        if (mMoveNum > 0) { --mMoveNum; }
-        if (mMoveNum < 0) { ++mMoveNum; }
-        if (mMoveNum == 0) { mIsMoveRequest = false; }
-    }
-
-    // マス移動
+    //-------------------------------------------
+    // マスを移動
+    //-------------------------------------------
     private void Move_()
     {
         // 進む先が未指定の場合は反転
@@ -111,7 +109,9 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    //-------------------------------------------
     // 停止
+    //-------------------------------------------
     private void Stop_()
     {
         // 剛体の速度を0に設定
@@ -121,6 +121,52 @@ public class PlayerController : MonoBehaviour
         // アニメーターパラメータをリセット（停止時アニメにする）
         mAnimator.SetFloat( "Turn", 0f );
         mAnimator.SetFloat( "Forward", 0f );
+    }
+
+    //-------------------------------------------
+    // 進行方向を設定
+    //-------------------------------------------
+    private void SetLookRotation( Vector3 i_next_position )
+    {
+        Vector3 diff = i_next_position - transform.position;
+        // y軸は考慮しない
+        diff.y = 0;
+
+        var look_rotation  = Quaternion.LookRotation( diff );
+        transform.rotation = Quaternion.Lerp( transform.rotation, look_rotation, 100f );
+    }
+
+    //-------------------------------------------
+    // マス移動をリクエスト
+    //-------------------------------------------
+    public void RequestMove( int i_move_num )
+    {
+        if( i_move_num > 0)
+        {
+            mMoveNum       = i_move_num;
+            mIsMoveRequest = true;
+        }
+    }
+
+    //-------------------------------------------
+    // マス移動中か
+    //-------------------------------------------
+    public bool IsMoving()
+    {
+        return mIsMoveRequest;
+    }
+
+    //-------------------------------------------
+    // 止まっているマスの種類を取得
+    //-------------------------------------------
+    public NormalPanelController.PANEL_KIND GetPanelKind()
+    {
+        if( mNowPanel != null )
+        {
+            return mNowPanel.GetComponent<NormalPanelController>().PanelKind;
+        }
+
+        return NormalPanelController.PANEL_KIND.BLUE;
     }
 
     // マス移動（ジャンプ移動）
@@ -179,25 +225,4 @@ public class PlayerController : MonoBehaviour
         yield break;
     }
     */
-
-    // 進行方向を向く
-    private void SetLookRotation( Vector3 i_next_position )
-    {
-        Vector3 diff = i_next_position - transform.position;
-        // y軸は考慮しない
-        diff.y = 0;
-
-        var look_rotation  = Quaternion.LookRotation( diff );
-        transform.rotation = Quaternion.Lerp( transform.rotation, look_rotation, 100f );
-    }
-
-    // 移動をリクエスト
-    public void RequestMove( int i_move_num )
-    {
-        if( i_move_num > 0)
-        {
-            mMoveNum       = i_move_num;
-            mIsMoveRequest = true;
-        }
-    }
 }

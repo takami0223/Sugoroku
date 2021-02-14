@@ -8,18 +8,23 @@ public class DiceController : MonoBehaviour
     public GameObject mValueFixedEffect; // 出目確定時のエフェクト
 
     private const string cDiceTagName = "Dice";
-    private Vector3      mDicePos;                 //サイコロの初期位置 追加!!
-    private Quaternion   mDiceRot;                 //サイコロの初期角度 追加!!
-    private bool         mIsRaycastWait   = true;  // ダイスのクリック待ちか
-    private bool         mIsRataWait      = true;  // ダイスの回転待ちか
-    private bool         mIsShowDiceValue = false; // ダイスの出目確定か
+    private Vector3      mDiceInitPos; //ダイスの初期位置
+    private Quaternion   mDiceInitRot; //ダイスの初期角度
+
+    private bool mIsRaycastWait = true;  // ダイスのクリック待ちか
+    private bool mIsRataWait    = true;  // ダイスの回転待ちか
 
     // Start is called before the first frame update
     void Start()
     {
+        // ダイスを非表示
         SetActive( false );
-        mDicePos = this.gameObject.transform.localPosition;
-        mDiceRot = this.gameObject.transform.localRotation;
+
+        // ダイスの姿勢初期設定
+        mDiceInitPos = this.gameObject.transform.localPosition;
+        mDiceInitRot = this.gameObject.transform.localRotation;
+        
+        // ダイスの物理初期設定
         this.gameObject.GetComponent<Rigidbody>().useGravity         = false;
         this.gameObject.GetComponent<Rigidbody>().maxAngularVelocity = 15.0f;
     }
@@ -49,33 +54,17 @@ public class DiceController : MonoBehaviour
 
         // 出目を更新をどうにかする
         //mDiceValue = this.gameObject.GetComponent<Die_d6>().value;
-
-        // 出た目を出力
-        if (mIsShowDiceValue)
-        {
-            // ダイスが止まったときに出目を取得する
-            if (IsStoping())
-            {
-                //Instantiate( mValueFixedEffect, this.transform.position, Quaternion.identity );
-                // 出目を更新
-                //mDiceValue = this.gameObject.GetComponent<Die_d6>().value;
-                //コンソールに出目を表示する
-                //Debug.Log( mDiceValue );
-                //結果表示をやめる
-                mIsShowDiceValue = false;
-            }
-        }
     }
 
     // ダイスを回転させる
     public IEnumerator DiceRota( int i_rota_count )
     {
+        // ダイスが出ていなければ有効化
         if (!this.gameObject.activeSelf)
         {
             this.SetActive( true );
             mIsRaycastWait   = true;
             mIsRataWait      = true;
-            mIsShowDiceValue = false;
         }
 
         if (i_rota_count > 0 && mIsRataWait)
@@ -86,12 +75,16 @@ public class DiceController : MonoBehaviour
 
             i_rota_count--;
 
-            // 指定秒数待機し、もう一度回転処理を呼ぶ
+            // 指定秒数待機
             yield return new WaitForSeconds( 0.3f );
-            StartCoroutine( DiceRota( i_rota_count ) );
 
+            // 別コルーチンで回転処理を呼ぶ（回転数を減らしたもの）
+            StartCoroutine( DiceRota( i_rota_count ) );
+            
+            // 自身は終了
             yield break;
         }
+        // 指定回数に到達したら、強制的に投げる
         else if (i_rota_count == 0)
         {
             mIsRataWait = false;
@@ -108,7 +101,7 @@ public class DiceController : MonoBehaviour
     // ダイスを投げる
     private void ThrowDice( GameObject i_dice )
     {
-        // すべてのコルーチンを止める
+        // すべてのコルーチン（ダイスに回転を与えている）を止める
         StopAllCoroutines();
 
         // 重力を付与
@@ -117,14 +110,13 @@ public class DiceController : MonoBehaviour
         // 回転の影響を無くす
         i_dice.GetComponent<Rigidbody>().velocity = Vector3.zero;
 
-        // 指定の方向に飛ばす
+        // 指定の方向（上）に飛ばす
         i_dice.GetComponent<Rigidbody>().AddForce( 0, 1500, 100 );
 
-        mIsRaycastWait   = false;
-        mIsShowDiceValue = true;
+        mIsRaycastWait = false;
     }
 
-    // サイコロの出目取得・非表示処理 追加!!
+    // ダイスの非表示処理
     public IEnumerator DiceDestroy()
     {
 
@@ -145,9 +137,9 @@ public class DiceController : MonoBehaviour
         // 回転の影響をなくす
         this.GetComponent<Rigidbody>().velocity = Vector3.zero;
 
-        // サイコロを初期位置・初期角度に戻す
-        this.transform.localPosition = mDicePos;
-        this.transform.localRotation = mDiceRot;
+        // サイコロを初期姿勢に戻す
+        this.transform.localPosition = mDiceInitPos;
+        this.transform.localRotation = mDiceInitRot;
 
         yield break;
     }

@@ -4,26 +4,20 @@ using UnityEngine;
 
 public class GameDirector : MonoBehaviour
 {
-    // ターンステート
-    public enum TarnState
-    {
-        ShowName,
-        DiceThrow,
-        PlayerMove,
-    }
     
-    public GameObject[] Players = new GameObject[ 1 ]; // プレイヤー
-    public GameObject   Dice;                          // ダイス
+    public GameObject[] Players;    // プレイヤー
+    public GameObject   Dice;       // ダイス
+    public Panel_Event  PanelEvent; // マスのイベント集
     
-    private TarnState mCurrentTarnState = TarnState.ShowName; // 現在のターンステート
-    private int       mNowPlayerID      = 0;                  // 現在のプレイヤーID
-    private int       mDiceValue        = 0;                  // ダイスの出目（DiceControllerが持つべき）
+    private int  mNowPlayerID      = 0;     // 現在のプレイヤーID
+    private int  mDiceValue        = 0;     // ダイスの出目（DiceControllerが持つべき）
+    private bool mIsFinishOneTarn  = false; // ターン終了したか
     
     // スクリプト用変数
     private DiceController mDiceCountroller;
 
     // インスタンス取得（シングルトン）
-    private static GameDirector instance;// = new GameDirector();
+    private static GameDirector instance;
     public static GameDirector Instance => instance;
 
     private void Awake()
@@ -42,87 +36,115 @@ public class GameDirector : MonoBehaviour
     void Start()
     {
         mDiceCountroller = Dice.GetComponent<DiceController>();
-        dispatch( TarnState.ShowName );
+
+        // ターン開始
+        StartCoroutine( SeaquenceOneTarn_() );
     }
 
 
     // Update is called once per frame
     void Update()
     {
-        // 名前表示
-
-        // ダイスが出現していなければ出現をリクエスト
-        if (mCurrentTarnState != TarnState.DiceThrow &&
-            Input.GetMouseButtonDown( 0 ))
+        if( mIsFinishOneTarn )
         {
-            dispatch( TarnState.DiceThrow );
+
+            // プレイヤーNo更新
+            if( mNowPlayerID < Players.Length - 1)
+            {
+                ++mNowPlayerID;
+            }
+            else
+            {
+                mNowPlayerID = 0;
+            }
+
+            // ターン終了条件を解除
+            mIsFinishOneTarn = false;
+
+            // 次ターンを開始
+            StartCoroutine( SeaquenceOneTarn_() );
         }
-
-        // ダイスの出目が確定したか
-        if (mCurrentTarnState == TarnState.DiceThrow &&
-            mDiceCountroller.IsStoping())
-        {
-            mDiceValue = Dice.GetComponent<Die_d6>().value;
-            Debug.Log( mDiceValue );
-            StartCoroutine( mDiceCountroller.DiceDestroy() );
-            dispatch( TarnState.PlayerMove );
-        }
-
-        // プレイヤーの移動 & マスイベントが終了したか
-
     }
 
-    public void dispatch( TarnState i_state )
+    //-------------------------------------------
+    //
+    // 1ターンのシーケンス
+    //
+    //-------------------------------------------
+    private IEnumerator SeaquenceOneTarn_()
     {
-        // 前のステートを記録
-        TarnState old_state = mCurrentTarnState;
-        // 現在のステートを更新
-        mCurrentTarnState = i_state;
+        // 名前表示
+        yield return StartCoroutine( ShowName_() );
 
-        // 現在のステートに応じて処理
-        switch (mCurrentTarnState)
-        {
-            case TarnState.ShowName:
-                StartCoroutine( ShowName_() );
-                break;
-            case TarnState.DiceThrow:
-                DiceThrow_();
-                break;
-            case TarnState.PlayerMove:
-                PlayerMove_();
-                break;
-            default:
-                break;
-        }
+        // ダイスを投げる
+        yield return StartCoroutine( DiceThrow_() );
+
+        // ダイスを削除
+        yield return StartCoroutine( mDiceCountroller.DiceDestroy() );
+
+        // プレイヤー移動
+        yield return StartCoroutine( PlayerMove_() );
+
+        // マスイベント
+        yield return StartCoroutine( PanelEvent_() );
+
+        // ターン終了
+        mIsFinishOneTarn = true;
+
     }
 
+    //-------------------------------------------
+    // プレイヤー名を表示
+    //-------------------------------------------
     private IEnumerator ShowName_()
     {
-        Debug.Log( "Player_1" );
+        Debug.Log( Players[ mNowPlayerID ].name );
         yield return new WaitForSeconds( 3.0f );
-        dispatch( TarnState.DiceThrow );
-        yield break;
     }
 
-    private void DiceThrow_()
+    //-------------------------------------------
+    // ダイスを投げる
+    //-------------------------------------------
+    private IEnumerator DiceThrow_()
     {
-        StartCoroutine( mDiceCountroller.DiceRota( 20 ) );
+        // ダイスを出現
+        yield return StartCoroutine( mDiceCountroller.DiceRota( 20 ) );
 
-        /*
-        if (!mDiceCountroller.IsStoping())
-        {
-            yield return null;
+        // ダイスの目が止ったか
+        yield return new WaitUntil( mDiceCountroller.IsStoping );
 
-        }
-
-        Debug.Log( mDiceCountroller.GetValue() );
-        mDiceCountroller.SetActive( false );
-        dispatch( TarnState.PlayerMove );
-        */
+        // ダイスの目を取得
+        mDiceValue = Dice.GetComponent<Die_d6>().value;
+        Debug.Log( mDiceValue );
     }
 
-    private void PlayerMove_()
+    //-------------------------------------------
+    // プレイヤー移動
+    //-------------------------------------------
+    private IEnumerator PlayerMove_()
     {
+        // 移動リクエスト
         Players[ mNowPlayerID ].GetComponent<PlayerController>().RequestMove( mDiceValue );
+
+        // 移動終了まで処理停止
+        yield return new WaitWhile( Players[ mNowPlayerID ].GetComponent<PlayerController>().IsMoving );
+    }
+
+    //-------------------------------------------
+    // マスイベント
+    //-------------------------------------------
+    private IEnumerator PanelEvent_()
+    {
+        // 現在のマスの種類を取得
+        var panel_kind      = Players[ mNowPlayerID ].GetComponent<PlayerController>().GetPanelKind();
+        var panel_event     = PanelEvent.sheets[(int)panel_kind].list;
+        int panel_event_num = panel_event.Count;
+        int event_idx       = Random.Range( 0, panel_event_num );
+
+        string sentence = panel_event[ event_idx ].Sentence;
+        int    amount   = panel_event[ event_idx ].Amount;
+        
+        Debug.LogFormat( "[ {0} ] {1}「{2}」", panel_kind.ToString(), sentence, amount );
+        yield return new WaitForSeconds( 2.0f );
     }
 }
